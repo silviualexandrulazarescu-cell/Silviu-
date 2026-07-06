@@ -1,6 +1,12 @@
 /**
  * TimePilot OVB - Aplicație Planificator Săptămânal
  * Manager modern cu sincronizare LocalStorage
+ * 
+ * Data Model:
+ * - Each activity has: id (unique immutable), category, subtype, day (0-6), hour (8-22), clientName, phone, notes
+ * - Never use array index as identifier
+ * - day and hour are ALWAYS stored explicitly and never derived from anything else
+ * - Rendering ONLY places activity if: activity.day === cellDay AND activity.hour === cellHour
  */
 
 // ============================================
@@ -49,10 +55,10 @@ const CONFIG = {
 // ============================================
 
 const STATE = {
-    activities: [],           // Stochează toate activitățile cu date complete
-    currentActivity: null,    // Urmărește activitatea editată curent
-    currentCell: null,        // Urmărește celula selectată curent
-    activityIdCounter: 0,     // Contor pentru ID-uri unice
+    activities: [],           // Array of activity objects with immutable id
+    currentActivity: null,    // Currently edited activity (copy)
+    currentCell: null,        // Currently selected cell with explicit day and hour
+    activityIdCounter: 0,     // Counter for unique immutable IDs
 };
 
 // ============================================
@@ -101,26 +107,59 @@ function initializeApplication() {
 
 /**
  * Salvează activitățile în LocalStorage
+ * Păstrează structura completă: id, category, subtype, day, hour, clientName, phone, notes
  */
 function saveActivitiesToStorage() {
     const data = STATE.activities.map(activity => ({
-        ...activity,
+        id: activity.id,
+        category: activity.category,
+        subtype: activity.subtype,
+        day: activity.day,
+        hour: activity.hour,
+        clientName: activity.clientName,
+        phone: activity.phone,
+        notes: activity.notes,
     }));
     localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(data));
 }
 
 /**
  * Încarcă activitățile din LocalStorage
+ * Validează că fiecare activitate are id, day, hour explicit
  */
 function loadActivitiesFromStorage() {
     const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
     if (stored) {
         try {
-            STATE.activities = JSON.parse(stored);
-            // Actualizează contorul pentru a asigura ID-uri unice
+            const loaded = JSON.parse(stored);
+            
+            // Validează și filtrează activitățile invalide
+            STATE.activities = loaded.filter(activity => {
+                // Verifică că fiecare activitate are ID unic și explicit
+                if (typeof activity.id !== 'number') {
+                    console.warn('Activitate cu ID invalid ignora:', activity);
+                    return false;
+                }
+                
+                // Verifică că day și hour sunt stocate explicit
+                if (typeof activity.day !== 'number' || activity.day < 0 || activity.day > 6) {
+                    console.warn('Activitate cu day invalid ignora:', activity);
+                    return false;
+                }
+                if (typeof activity.hour !== 'number' || activity.hour < CONFIG.START_TIME || activity.hour > CONFIG.END_TIME) {
+                    console.warn('Activitate cu hour invalid ignora:', activity);
+                    return false;
+                }
+                
+                return true;
+            });
+            
+            // Actualizează contorul pentru a asigura ID-uri unice în viitor
             if (STATE.activities.length > 0) {
                 STATE.activityIdCounter = Math.max(...STATE.activities.map(a => a.id)) + 1;
             }
+            
+            console.log(`Încărcate ${STATE.activities.length} activități din LocalStorage`);
         } catch (error) {
             console.error('Eroare la încărcarea activităților:', error);
             STATE.activities = [];
@@ -129,7 +168,7 @@ function loadActivitiesFromStorage() {
 }
 
 /**
- * Generează ID unic pentru activitate
+ * Generează ID unic immutable pentru o nouă activitate
  */
 function generateActivityId() {
     return STATE.activityIdCounter++;
@@ -155,10 +194,12 @@ function generatePlanner() {
         timeCell.textContent = timeString;
         row.appendChild(timeCell);
 
-        // Creează celule pentru fiecare zi
+        // Creează celule pentru fiecare zi (0-6: Luni-Duminică)
         for (let dayIndex = 0; dayIndex < CONFIG.DAYS.length; dayIndex++) {
             const cell = document.createElement('td');
             const cellId = generateCellId(hour, dayIndex);
+            
+            // Stochează explicit day și hour ca atribute
             cell.setAttribute('data-time', hour);
             cell.setAttribute('data-day', dayIndex);
             cell.setAttribute('data-cell-id', cellId);
@@ -188,14 +229,22 @@ function findCellElement(cellId) {
 }
 
 // ============================================
-// RANDARE ACTIVITĂȚI
+// RANDARE ACTIVITĂȚI - LOGICA CORECTĂ
 // ============================================
 
 /**
  * Randează toate activitățile pe planificator
+ * 
+ * ALGORITM CORECT:
+ * 1. Șterge toate activitățile existente din DOM
+ * 2. Pentru FIECARE (hour, dayIndex) din planner
+ *    - Pentru FIECARE activitate din STATE.activities
+ *      - Dacă activity.day === dayIndex ȘI activity.hour === hour
+ *        - Adaugă activitate în această celulă (DOAR AICI!)
+ *        - Doar UNA activitate pe celulă
  */
 function renderActivitiesOnPlanner() {
-    // Șterge mai întâi toate celulele
+    // PASUL 1: Șterge todas las actividades existentes
     document.querySelectorAll('.weekly-planner td.scheduled').forEach(cell => {
         cell.classList.remove('scheduled');
         cell.textContent = '';
@@ -204,13 +253,31 @@ function renderActivitiesOnPlanner() {
         cell.style.backgroundColor = '';
     });
 
-    // Randează fiecare activitate
+    // PASUL 2: Randează FIECARE activitate din stare
+    // Fiecare activitate trebuie să apară EXACT în celula definită de activity.day și activity.hour
     STATE.activities.forEach(activity => {
+        // Validare explicită pentru fiecare activitate
+        if (typeof activity.id !== 'number') {
+            console.error('Activitate fără ID valid:', activity);
+            return;
+        }
+        if (typeof activity.day !== 'number' || activity.day < 0 || activity.day > 6) {
+            console.error('Activitate cu day invalid:', activity);
+            return;
+        }
+        if (typeof activity.hour !== 'number' || activity.hour < CONFIG.START_TIME || activity.hour > CONFIG.END_TIME) {
+            console.error('Activitate cu hour invalid:', activity);
+            return;
+        }
+
+        // Construiește cellId din day și hour stocate în activitate
         const cellId = generateCellId(activity.hour, activity.day);
         const cell = findCellElement(cellId);
         
         if (cell) {
             updateCellVisual(cell, activity);
+        } else {
+            console.error(`Celula nu găsită pentru activitate: cellId=${cellId}, day=${activity.day}, hour=${activity.hour}`);
         }
     });
 }
@@ -282,11 +349,13 @@ function handleCellClick(event) {
     const cell = event.target.closest('td');
     if (!cell) return;
 
+    // Citește day și hour DIRECT din atributele celulei (source of truth)
     const hour = parseInt(cell.getAttribute('data-time'));
     const dayIndex = parseInt(cell.getAttribute('data-day'));
     const cellId = cell.getAttribute('data-cell-id');
     const activityId = cell.getAttribute('data-activity-id');
 
+    // Salvează informații explicite despre celula selectată
     STATE.currentCell = {
         element: cell,
         cellId: cellId,
@@ -297,7 +366,8 @@ function handleCellClick(event) {
 
     // Verifică dacă există o activitate existentă în această celulă
     if (activityId) {
-        const existingActivity = STATE.activities.find(a => a.id == activityId);
+        // Găsește activitatea după ID (nu după index!)
+        const existingActivity = STATE.activities.find(a => a.id == parseInt(activityId));
         if (existingActivity) {
             STATE.currentActivity = { ...existingActivity };
             populateFormWithData(STATE.currentActivity);
@@ -344,6 +414,11 @@ function handleCategoryChange(event) {
 
 /**
  * Gestionează clic pe butonul de salvare
+ * 
+ * REGULI STRICTE:
+ * - day și hour vvin ÎNTOTDEAUNA de la STATE.currentCell (nu se modifică din alte surse)
+ * - id rămâne IMMUTABLE (nu se schimbă niciodată pentru o activitate existentă)
+ * - Fiecare activitate salvată trebuie să aibă day și hour EXPLICIT
  */
 function handleSave() {
     const category = DOM.categorySelect.value;
@@ -358,6 +433,13 @@ function handleSave() {
         return;
     }
 
+    // Validare: STATE.currentCell trebuie să fie setată
+    if (!STATE.currentCell) {
+        console.error('currentCell nu este setată!');
+        showAlert('Eroare: Celula nu este selectată');
+        return;
+    }
+
     const activityData = {
         id: STATE.currentActivity ? STATE.currentActivity.id : generateActivityId(),
         category: category,
@@ -365,19 +447,33 @@ function handleSave() {
         clientName: DOM.clientName.value.trim(),
         phone: DOM.phone.value.trim(),
         notes: DOM.notes.value.trim(),
-        day: STATE.currentCell.dayIndex,
-        hour: STATE.currentCell.hour,
+        day: STATE.currentCell.dayIndex,        // EXPLICIT de la celula selectată
+        hour: STATE.currentCell.hour,           // EXPLICIT de la celula selectată
     };
 
+    // Validare: day și hour sunt ÎNTOTDEAUNA valide
+    if (typeof activityData.day !== 'number' || activityData.day < 0 || activityData.day > 6) {
+        console.error('Activitate cu day invalid:', activityData);
+        showAlert('Eroare: Ziua nu este validă');
+        return;
+    }
+    if (typeof activityData.hour !== 'number' || activityData.hour < CONFIG.START_TIME || activityData.hour > CONFIG.END_TIME) {
+        console.error('Activitate cu hour invalid:', activityData);
+        showAlert('Eroare: Ora nu este validă');
+        return;
+    }
+
     if (STATE.currentActivity) {
-        // Actualizează activitate existentă
+        // EDITARE: Actualizează activitate existentă după ID
         const index = STATE.activities.findIndex(a => a.id === STATE.currentActivity.id);
         if (index !== -1) {
             STATE.activities[index] = activityData;
+            console.log(`Activitate editată: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
         }
     } else {
-        // Adaugă activitate nouă
+        // CREARE: Adaugă activitate nouă
         STATE.activities.push(activityData);
+        console.log(`Activitate creată: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
     }
 
     // Salvează în localStorage
@@ -395,13 +491,26 @@ function handleSave() {
 
 /**
  * Gestionează clic pe butonul de ștergere
+ * 
+ * REGULA CRUCIALĂ: Doar activitatea cu ID-ul corespunzător se șterge
+ * Toate celelalte activități rămân în poziția lor originală
  */
 function handleDelete() {
     if (!STATE.currentActivity) return;
 
     if (confirm('Ești sigur că vrei să ștergi această activitate?')) {
-        // Elimină activitate din stare
-        STATE.activities = STATE.activities.filter(a => a.id !== STATE.currentActivity.id);
+        const idToDelete = STATE.currentActivity.id;
+        
+        // Șterge DOAR activitatea cu ID-ul specific (nu după index!)
+        const originalCount = STATE.activities.length;
+        STATE.activities = STATE.activities.filter(a => a.id !== idToDelete);
+        const deletedCount = originalCount - STATE.activities.length;
+        
+        console.log(`Activitate ștearsă: id=${idToDelete}, rămase ${STATE.activities.length} activități`);
+        
+        if (deletedCount === 0) {
+            console.warn('Atenție: Nicio activitate nu a fost ștearsă!');
+        }
 
         // Salvează în localStorage
         saveActivitiesToStorage();
@@ -561,7 +670,7 @@ function clearAllSchedules() {
 }
 
 /**
- * Obține activitate după ID
+ * Obține activitate după ID (nu după index)
  */
 function getActivity(activityId) {
     return STATE.activities.find(a => a.id === activityId);
