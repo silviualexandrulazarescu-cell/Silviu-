@@ -197,12 +197,10 @@ function generatePlanner() {
         // Creează celule pentru fiecare zi (0-6: Luni-Duminică)
         for (let dayIndex = 0; dayIndex < CONFIG.DAYS.length; dayIndex++) {
             const cell = document.createElement('td');
-            const cellId = generateCellId(hour, dayIndex);
             
-            // Stochează explicit day și hour ca atribute
-            cell.setAttribute('data-time', hour);
+            // CORECTARE: Setează AMBELE atribute data-day și data-hour pentru selector unic
             cell.setAttribute('data-day', dayIndex);
-            cell.setAttribute('data-cell-id', cellId);
+            cell.setAttribute('data-hour', hour);
             cell.addEventListener('click', handleCellClick);
 
             row.appendChild(cell);
@@ -214,20 +212,6 @@ function generatePlanner() {
     DOM.plannerBody.appendChild(fragment);
 }
 
-/**
- * Generează ID unic pentru celulă pe baza orei și zilei
- */
-function generateCellId(hour, dayIndex) {
-    return `${String(hour).padStart(2, '0')}-${dayIndex}`;
-}
-
-/**
- * Găsește element de celulă după ID
- */
-function findCellElement(cellId) {
-    return document.querySelector(`[data-cell-id="${cellId}"]`);
-}
-
 // ============================================
 // RANDARE ACTIVITĂȚI - LOGICA CORECTĂ
 // ============================================
@@ -237,15 +221,13 @@ function findCellElement(cellId) {
  * 
  * ALGORITM CORECT:
  * 1. Șterge toate activitățile existente din DOM
- * 2. Pentru FIECARE (hour, dayIndex) din planner
- *    - Pentru FIECARE activitate din STATE.activities
- *      - Dacă activity.day === dayIndex ȘI activity.hour === hour
- *        - Adaugă activitate în această celulă (DOAR AICI!)
- *        - Doar UNA activitate pe celulă
+ * 2. Pentru FIECARE activitate din STATE.activities
+ *    - Găsește celula cu data-day === activity.day ȘI data-hour === activity.hour
+ *    - Adaugă activitate DOAR în această celulă
  */
 function renderActivitiesOnPlanner() {
-    // PASUL 1: Șterge todas las actividades existentes
-    document.querySelectorAll('.weekly-planner td.scheduled').forEach(cell => {
+    // PASUL 1: Șterge toate activitățile existente
+    document.querySelectorAll('.weekly-planner tbody td').forEach(cell => {
         cell.classList.remove('scheduled');
         cell.textContent = '';
         cell.title = '';
@@ -270,14 +252,14 @@ function renderActivitiesOnPlanner() {
             return;
         }
 
-        // Construiește cellId din day și hour stocate în activitate
-        const cellId = generateCellId(activity.hour, activity.day);
-        const cell = findCellElement(cellId);
+        // CORECTARE: Folosește selector cu AMBELE atribute pentru a găsi celula unică
+        const selector = `[data-day="${activity.day}"][data-hour="${activity.hour}"]`;
+        const cell = document.querySelector(selector);
         
         if (cell) {
             updateCellVisual(cell, activity);
         } else {
-            console.error(`Celula nu găsită pentru activitate: cellId=${cellId}, day=${activity.day}, hour=${activity.hour}`);
+            console.error(`Celula nu găsită pentru activitate: day=${activity.day}, hour=${activity.hour}`);
         }
     });
 }
@@ -350,15 +332,13 @@ function handleCellClick(event) {
     if (!cell) return;
 
     // Citește day și hour DIRECT din atributele celulei (source of truth)
-    const hour = parseInt(cell.getAttribute('data-time'));
+    const hour = parseInt(cell.getAttribute('data-hour'));
     const dayIndex = parseInt(cell.getAttribute('data-day'));
-    const cellId = cell.getAttribute('data-cell-id');
     const activityId = cell.getAttribute('data-activity-id');
 
     // Salvează informații explicite despre celula selectată
     STATE.currentCell = {
         element: cell,
-        cellId: cellId,
         hour: hour,
         dayIndex: dayIndex,
         day: CONFIG.DAYS[dayIndex],
@@ -416,7 +396,7 @@ function handleCategoryChange(event) {
  * Gestionează clic pe butonul de salvare
  * 
  * REGULI STRICTE:
- * - day și hour vvin ÎNTOTDEAUNA de la STATE.currentCell (nu se modifică din alte surse)
+ * - day și hour vin ÎNTOTDEAUNA de la STATE.currentCell (nu se modifică din alte surse)
  * - id rămâne IMMUTABLE (nu se schimbă niciodată pentru o activitate existentă)
  * - Fiecare activitate salvată trebuie să aibă day și hour EXPLICIT
  */
