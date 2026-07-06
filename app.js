@@ -2,12 +2,11 @@
  * TimePilot OVB - Aplicație Planificator Săptămânal
  * Manager modern cu sincronizare LocalStorage
  * 
- * Data Model:
- * - Each activity has: id (unique immutable), category, subtype, day (0-6), hour (8-22), clientName, phone, notes
- * - Never use array index as identifier
- * - day and hour are ALWAYS stored explicitly and never derived from anything else
- * - Rendering ONLY places activity if: activity.day === cellDay AND activity.hour === cellHour
- * - CRITICAL: Use BOTH day AND hour to identify cells, NEVER just hour alone
+ * REWRITTEN RENDERING ENGINE:
+ * - Uses Map for O(1) cell lookup
+ * - No querySelector() in rendering loops
+ * - Perfect day/hour isolation
+ * - Immutable activity IDs via crypto.randomUUID() or counter
  */
 
 // ============================================
@@ -48,6 +47,7 @@ const CONFIG = {
     START_TIME: 8,
     END_TIME: 22,
     DAYS: ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică'],
+    DAY_NAMES: ['luni', 'marti', 'miercuri', 'joi', 'vineri', 'sambata', 'duminica'],
     STORAGE_KEY: 'timepilot_activities',
 };
 
@@ -60,6 +60,7 @@ const STATE = {
     currentActivity: null,    // Currently edited activity (copy)
     currentCell: null,        // Currently selected cell with explicit day and hour
     activityIdCounter: 0,     // Counter for unique immutable IDs
+    plannerCells: new Map(),  // Map for O(1) cell lookup: key="${dayName}-${hour}:00" -> td element
 };
 
 // ============================================
@@ -137,7 +138,7 @@ function loadActivitiesFromStorage() {
             // Validează și filtrează activitățile invalide
             STATE.activities = loaded.filter(activity => {
                 // Verifică că fiecare activitate are ID unic și explicit
-                if (typeof activity.id !== 'number') {
+                if (typeof activity.id !== 'number' && typeof activity.id !== 'string') {
                     console.warn('Activitate cu ID invalid ignora:', activity);
                     return false;
                 }
@@ -157,7 +158,12 @@ function loadActivitiesFromStorage() {
             
             // Actualizează contorul pentru a asigura ID-uri unice în viitor
             if (STATE.activities.length > 0) {
-                STATE.activityIdCounter = Math.max(...STATE.activities.map(a => a.id)) + 1;
+                const numericIds = STATE.activities
+                    .filter(a => typeof a.id === 'number')
+                    .map(a => a.id);
+                if (numericIds.length > 0) {
+                    STATE.activityIdCounter = Math.max(...numericIds) + 1;
+                }
             }
             
             console.log(`Încărcate ${STATE.activities.length} activități din LocalStorage`);
@@ -170,6 +176,7 @@ function loadActivitiesFromStorage() {
 
 /**
  * Generează ID unic immutable pentru o nouă activitate
+ * Folosește numeric counter (compatible cu localStorage)
  */
 function generateActivityId() {
     return STATE.activityIdCounter++;
@@ -180,11 +187,16 @@ function generateActivityId() {
 // ============================================
 
 /**
- * Generează tabelul planificatorului săptămânal dinamic
- * CRITICAL: Fiecare celulă trebuie să aibă AMBELE atribute data-day și data-hour
+ * Generează tabelul planificatorului săptămânal
+ * 
+ * CRITICAL NEW APPROACH:
+ * 1. Creates cells with data-day (string name) and data-hour (formatted time)
+ * 2. Builds STATE.plannerCells Map: key = "${dayName}-${hour}:00" -> td element
+ * 3. Zero querySelector() calls in rendering
  */
 function generatePlanner() {
     const fragment = document.createDocumentFragment();
+    STATE.plannerCells.clear(); // Reset Map
 
     for (let hour = CONFIG.START_TIME; hour <= CONFIG.END_TIME; hour++) {
         const row = document.createElement('tr');
@@ -199,12 +211,18 @@ function generatePlanner() {
         // Creează celule pentru fiecare zi (0-6: Luni-Duminică)
         for (let dayIndex = 0; dayIndex < CONFIG.DAYS.length; dayIndex++) {
             const cell = document.createElement('td');
+            const dayName = CONFIG.DAY_NAMES[dayIndex];
             
-            // CRITICAL FIX: Setează AMBELE atribute data-day și data-hour
-            // Acestea sunt OBLIGATORII pentru a identifica unic fiecare celulă
-            cell.setAttribute('data-day', dayIndex);
-            cell.setAttribute('data-hour', hour);
+            // Set attributes with proper format
+            cell.setAttribute('data-day', dayName);
+            cell.setAttribute('data-hour', timeString);
             cell.addEventListener('click', handleCellClick);
+
+            // BUILD THE MAP: key = "${dayName}-${hour}:00" -> td
+            const cellKey = `${dayName}-${timeString}`;
+            STATE.plannerCells.set(cellKey, cell);
+            
+            console.log(`Planifier cell registered: ${cellKey}`);
 
             row.appendChild(cell);
         }
@@ -213,62 +231,79 @@ function generatePlanner() {
     }
 
     DOM.plannerBody.appendChild(fragment);
+    console.log(`Planner generated with ${STATE.plannerCells.size} cells`);
 }
 
 // ============================================
-// RANDARE ACTIVITĂȚI - LOGICA CORECTĂ
+// RANDARE ACTIVITĂȚI - MOTORUL RESCRIS
 // ============================================
 
 /**
  * Randează toate activitățile pe planificator
  * 
- * ALGORITM CORECT:
- * 1. Șterge toate activitățile existente din DOM
- * 2. Pentru FIECARE activitate din STATE.activities
- *    - Găsește celula cu data-day === activity.day ȘI data-hour === activity.hour
- *    - Adaugă activitate DOAR în această celulă
- *    - NEVER use only hour to find cells
+ * REWRITTEN ENGINE:
+ * 1. Clears all cells
+ * 2. For each activity, uses Map.get() - NO querySelector()
+ * 3. Perfect day/hour isolation guaranteed
  */
 function renderActivitiesOnPlanner() {
-    // PASUL 1: Șterge toate activitățile existente din TOATE celulele
-    document.querySelectorAll('.weekly-planner tbody td').forEach(cell => {
-        cell.classList.remove('scheduled');
-        cell.textContent = '';
-        cell.title = '';
-        cell.removeAttribute('data-activity-id');
-        cell.style.backgroundColor = '';
+    // PASUL 1: Clear all cells via Map
+    STATE.plannerCells.forEach(cell => {
+        clearCell(cell);
     });
 
-    // PASUL 2: Randează FIECARE activitate din stare în celula ei corectă
-    // Fiecare activitate trebuie să apară EXACT în celula definită de activity.day și activity.hour
+    // PASUL 2: Render each activity using Map lookup
     STATE.activities.forEach(activity => {
-        // Validare explicită pentru fiecare activitate
-        if (typeof activity.id !== 'number') {
-            console.error('Activitate fără ID valid:', activity);
-            return;
-        }
-        if (typeof activity.day !== 'number' || activity.day < 0 || activity.day > 6) {
-            console.error('Activitate cu day invalid:', activity);
-            return;
-        }
-        if (typeof activity.hour !== 'number' || activity.hour < CONFIG.START_TIME || activity.hour > CONFIG.END_TIME) {
-            console.error('Activitate cu hour invalid:', activity);
+        // Validate activity
+        if (!validateActivity(activity)) {
             return;
         }
 
-        // CRITICAL FIX: Folosește selector cu AMBELE atribute data-day ȘI data-hour
-        // Aceasta garantează că găsim celula exactă, nu o celulă random cu aceeași oră
-        // Format: [data-day="VALUE"][data-hour="VALUE"]
-        const cellSelector = `[data-day="${activity.day}"][data-hour="${activity.hour}"]`;
-        const cell = document.querySelector(cellSelector);
+        // BUILD KEY: day (0-6) to dayName, then "${dayName}-${hour}:00"
+        const dayName = CONFIG.DAY_NAMES[activity.day];
+        const hourString = `${String(activity.hour).padStart(2, '0')}:00`;
+        const cellKey = `${dayName}-${hourString}`;
+
+        // CRITICAL: Use Map.get() - NEVER querySelector() in loop
+        const cell = STATE.plannerCells.get(cellKey);
         
         if (cell) {
             updateCellVisual(cell, activity);
-            console.log(`Activitate randată: id=${activity.id}, selector=${cellSelector}`);
+            console.log(`✓ Rendered activity id=${activity.id} in cell key="${cellKey}"`);
         } else {
-            console.error(`Celula nu găsită pentru activitate: selector=${cellSelector}, day=${activity.day}, hour=${activity.hour}`);
+            console.error(`✗ Cell NOT found for activity id=${activity.id}, key="${cellKey}"`);
         }
     });
+}
+
+/**
+ * Validează o activitate
+ */
+function validateActivity(activity) {
+    if (!activity.id) {
+        console.error('Activitate fără ID valid:', activity);
+        return false;
+    }
+    if (typeof activity.day !== 'number' || activity.day < 0 || activity.day > 6) {
+        console.error('Activitate cu day invalid:', activity);
+        return false;
+    }
+    if (typeof activity.hour !== 'number' || activity.hour < CONFIG.START_TIME || activity.hour > CONFIG.END_TIME) {
+        console.error('Activitate cu hour invalid:', activity);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Clears a cell back to empty state
+ */
+function clearCell(cell) {
+    cell.classList.remove('scheduled');
+    cell.textContent = '';
+    cell.title = '';
+    cell.removeAttribute('data-activity-id');
+    cell.style.backgroundColor = '';
 }
 
 /**
@@ -284,8 +319,6 @@ function getActivityColor(activity) {
 
 /**
  * Actualizează aspectul vizual al celulei cu date de activitate
- * CRITICAL: Această funcție NUMAI adaugă conținut în celula selectată
- * Celula trebuie deja să fie găsită cu AMBELE day și hour
  */
 function updateCellVisual(cell, activity) {
     cell.classList.add('scheduled');
@@ -326,7 +359,7 @@ function generateCellTooltip(activity) {
 }
 
 // ============================================
-// MANIPULATORI Evenimente
+// MANIPULATORI EVENIMENTE
 // ============================================
 
 /**
@@ -340,15 +373,23 @@ function handleCellClick(event) {
     const cell = event.target.closest('td');
     if (!cell) return;
 
-    // Citește day și hour DIRECT din atributele celulei (source of truth)
-    // CRITICAL: Ambele valori trebuie să fie prezente și valide
-    const dayIndex = parseInt(cell.getAttribute('data-day'));
-    const hour = parseInt(cell.getAttribute('data-hour'));
+    // Read day (as name) and hour from cell attributes
+    const dayName = cell.getAttribute('data-day');
+    const hourString = cell.getAttribute('data-hour');
     const activityId = cell.getAttribute('data-activity-id');
 
-    // Validare: ambele coordinate trebuie să fie valide
-    if (isNaN(dayIndex) || isNaN(hour)) {
+    // Validate
+    if (!dayName || !hourString) {
         console.error('Eroare: Celula nu are atributele data-day sau data-hour valide');
+        return;
+    }
+
+    // Convert dayName back to dayIndex
+    const dayIndex = CONFIG.DAY_NAMES.indexOf(dayName);
+    const hour = parseInt(hourString);
+
+    if (dayIndex < 0 || isNaN(hour)) {
+        console.error('Eroare: Coordonate celulei invalide');
         return;
     }
 
@@ -358,12 +399,13 @@ function handleCellClick(event) {
         hour: hour,
         dayIndex: dayIndex,
         day: CONFIG.DAYS[dayIndex],
+        dayName: dayName,
     };
 
     // Verifică dacă există o activitate existentă în această celulă
     if (activityId) {
         // Găsește activitatea după ID (nu după index!)
-        const existingActivity = STATE.activities.find(a => a.id == parseInt(activityId));
+        const existingActivity = STATE.activities.find(a => String(a.id) === String(activityId));
         if (existingActivity) {
             STATE.currentActivity = { ...existingActivity };
             populateFormWithData(STATE.currentActivity);
@@ -412,9 +454,9 @@ function handleCategoryChange(event) {
  * Gestionează clic pe butonul de salvare
  * 
  * REGULI STRICTE:
- * - day și hour vin ÎNTOTDEAUNA de la STATE.currentCell (nu se modifică din alte surse)
- * - id rămâne IMMUTABLE (nu se schimbă niciodată pentru o activitate existentă)
- * - Fiecare activitate salvată trebuie să aibă day și hour EXPLICIT
+ * - day și hour vin ÎNTOTDEAUNA de la STATE.currentCell
+ * - id rămâne IMMUTABLE
+ * - Fiecare activitate are day și hour EXPLICIT
  */
 function handleSave() {
     const category = DOM.categorySelect.value;
@@ -464,12 +506,12 @@ function handleSave() {
         const index = STATE.activities.findIndex(a => a.id === STATE.currentActivity.id);
         if (index !== -1) {
             STATE.activities[index] = activityData;
-            console.log(`Activitate editată: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
+            console.log(`✓ Activity updated: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
         }
     } else {
         // CREARE: Adaugă activitate nouă
         STATE.activities.push(activityData);
-        console.log(`Activitate creată: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
+        console.log(`✓ Activity created: id=${activityData.id}, day=${activityData.day}, hour=${activityData.hour}`);
     }
 
     // Salvează în localStorage
@@ -488,9 +530,7 @@ function handleSave() {
 /**
  * Gestionează clic pe butonul de ștergere
  * 
- * REGULA CRUCIALĂ: Doar activitatea cu ID-ul corespunzător se șterge
- * Toate celelalte activități rămân în poziția lor originală
- * CRITICAL: Nicio activitate NU va fi mutată vreodată din cauza unei ștergeri
+ * CRITICAL: Delete ONLY by ID, never by index
  */
 function handleDelete() {
     if (!STATE.currentActivity) return;
@@ -498,15 +538,15 @@ function handleDelete() {
     if (confirm('Ești sigur că vrei să ștergi această activitate?')) {
         const idToDelete = STATE.currentActivity.id;
         
-        // Șterge DOAR activitatea cu ID-ul specific (nu după index!)
+        // Delete ONLY the activity with matching ID
         const originalCount = STATE.activities.length;
         STATE.activities = STATE.activities.filter(a => a.id !== idToDelete);
         const deletedCount = originalCount - STATE.activities.length;
         
-        console.log(`Activitate ștearsă: id=${idToDelete}, rămase ${STATE.activities.length} activități`);
+        console.log(`✓ Activity deleted: id=${idToDelete}, remaining=${STATE.activities.length}`);
         
         if (deletedCount === 0) {
-            console.warn('Atenție: Nicio activitate nu a fost ștearsă!');
+            console.warn('⚠ Warning: No activities were deleted!');
         }
 
         // Salvează în localStorage
