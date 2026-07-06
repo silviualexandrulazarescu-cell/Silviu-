@@ -195,8 +195,13 @@ function generateActivityId() {
  * 3. Zero querySelector() calls in rendering
  */
 function generatePlanner() {
+    // MUST clear planner body first to avoid stale/duplicate DOM cells
+    DOM.plannerBody.innerHTML = '';
+
     const fragment = document.createDocumentFragment();
     STATE.plannerCells.clear(); // Reset Map
+
+    const allKeys = [];
 
     for (let hour = CONFIG.START_TIME; hour <= CONFIG.END_TIME; hour++) {
         const row = document.createElement('tr');
@@ -221,8 +226,10 @@ function generatePlanner() {
             // BUILD THE MAP: key = "${dayName}-${hour}:00" -> td
             const cellKey = `${dayName}-${timeString}`;
             STATE.plannerCells.set(cellKey, cell);
+            allKeys.push(cellKey);
             
-            console.log(`Planifier cell registered: ${cellKey}`);
+            // Log every generated key
+            console.log(cellKey);
 
             row.appendChild(cell);
         }
@@ -231,7 +238,65 @@ function generatePlanner() {
     }
 
     DOM.plannerBody.appendChild(fragment);
+
+    // Verify 105 unique keys and print duplicates if they exist
+    const keyCount = new Map();
+    allKeys.forEach(key => {
+        keyCount.set(key, (keyCount.get(key) || 0) + 1);
+    });
+
+    const duplicateKeys = [...keyCount.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([key]) => key);
+
+    const uniqueKeyCount = keyCount.size;
+    console.log(`Planner generated keys: total=${allKeys.length}, unique=${uniqueKeyCount}`);
+
+    if (duplicateKeys.length > 0) {
+        console.error('Duplicate planner keys found:', duplicateKeys);
+    }
+
+    if (uniqueKeyCount !== 105) {
+        console.error(`Expected exactly 105 unique keys, got ${uniqueKeyCount}`);
+    }
+
+    // Verify plannerCells.size is always 105
     console.log(`Planner generated with ${STATE.plannerCells.size} cells`);
+    if (STATE.plannerCells.size !== 105) {
+        console.error(`plannerCells.size mismatch: expected 105, got ${STATE.plannerCells.size}`);
+    }
+
+    // Verify each TD has unique data-day + data-hour combination
+    verifyPlannerTdAttributes();
+}
+
+/**
+ * Verifică dacă fiecare TD are combinație unică data-day + data-hour
+ */
+function verifyPlannerTdAttributes() {
+    const tds = DOM.plannerBody.querySelectorAll('td[data-day][data-hour]');
+    const tdKeys = [];
+
+    tds.forEach(td => {
+        const day = td.getAttribute('data-day');
+        const hour = td.getAttribute('data-hour');
+        tdKeys.push(`${day}-${hour}`);
+    });
+
+    const tdKeyCount = new Map();
+    tdKeys.forEach(key => tdKeyCount.set(key, (tdKeyCount.get(key) || 0) + 1));
+
+    const duplicates = [...tdKeyCount.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([key]) => key);
+
+    if (duplicates.length > 0) {
+        console.error('Duplicate TD data-day/data-hour combinations found:', duplicates);
+    }
+
+    if (tds.length !== 105) {
+        console.error(`Expected 105 TD planner cells, got ${tds.length}`);
+    }
 }
 
 // ============================================
@@ -300,10 +365,17 @@ function validateActivity(activity) {
  */
 function clearCell(cell) {
     cell.classList.remove('scheduled');
-    cell.textContent = '';
+    cell.innerHTML = '';
     cell.title = '';
     cell.removeAttribute('data-activity-id');
     cell.style.backgroundColor = '';
+
+    // Remove every temporary dataset property (except structural day/hour)
+    Object.keys(cell.dataset).forEach((datasetKey) => {
+        if (datasetKey !== 'day' && datasetKey !== 'hour') {
+            delete cell.dataset[datasetKey];
+        }
+    });
 }
 
 /**
@@ -322,7 +394,8 @@ function getActivityColor(activity) {
  */
 function updateCellVisual(cell, activity) {
     cell.classList.add('scheduled');
-    cell.setAttribute('data-activity-id', activity.id);
+    // Always overwrite with current activity id
+    cell.setAttribute('data-activity-id', String(activity.id));
     
     // Determină textul afișat pe baza categoriei
     let displayText = activity.category;
