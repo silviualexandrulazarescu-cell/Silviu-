@@ -7,6 +7,7 @@
  * - Never use array index as identifier
  * - day and hour are ALWAYS stored explicitly and never derived from anything else
  * - Rendering ONLY places activity if: activity.day === cellDay AND activity.hour === cellHour
+ * - CRITICAL: Use BOTH day AND hour to identify cells, NEVER just hour alone
  */
 
 // ============================================
@@ -180,6 +181,7 @@ function generateActivityId() {
 
 /**
  * Generează tabelul planificatorului săptămânal dinamic
+ * CRITICAL: Fiecare celulă trebuie să aibă AMBELE atribute data-day și data-hour
  */
 function generatePlanner() {
     const fragment = document.createDocumentFragment();
@@ -198,7 +200,8 @@ function generatePlanner() {
         for (let dayIndex = 0; dayIndex < CONFIG.DAYS.length; dayIndex++) {
             const cell = document.createElement('td');
             
-            // CORECTARE: Setează AMBELE atribute data-day și data-hour pentru selector unic
+            // CRITICAL FIX: Setează AMBELE atribute data-day și data-hour
+            // Acestea sunt OBLIGATORII pentru a identifica unic fiecare celulă
             cell.setAttribute('data-day', dayIndex);
             cell.setAttribute('data-hour', hour);
             cell.addEventListener('click', handleCellClick);
@@ -224,9 +227,10 @@ function generatePlanner() {
  * 2. Pentru FIECARE activitate din STATE.activities
  *    - Găsește celula cu data-day === activity.day ȘI data-hour === activity.hour
  *    - Adaugă activitate DOAR în această celulă
+ *    - NEVER use only hour to find cells
  */
 function renderActivitiesOnPlanner() {
-    // PASUL 1: Șterge toate activitățile existente
+    // PASUL 1: Șterge toate activitățile existente din TOATE celulele
     document.querySelectorAll('.weekly-planner tbody td').forEach(cell => {
         cell.classList.remove('scheduled');
         cell.textContent = '';
@@ -235,7 +239,7 @@ function renderActivitiesOnPlanner() {
         cell.style.backgroundColor = '';
     });
 
-    // PASUL 2: Randează FIECARE activitate din stare
+    // PASUL 2: Randează FIECARE activitate din stare în celula ei corectă
     // Fiecare activitate trebuie să apară EXACT în celula definită de activity.day și activity.hour
     STATE.activities.forEach(activity => {
         // Validare explicită pentru fiecare activitate
@@ -252,14 +256,17 @@ function renderActivitiesOnPlanner() {
             return;
         }
 
-        // CORECTARE: Folosește selector cu AMBELE atribute pentru a găsi celula unică
-        const selector = `[data-day="${activity.day}"][data-hour="${activity.hour}"]`;
-        const cell = document.querySelector(selector);
+        // CRITICAL FIX: Folosește selector cu AMBELE atribute data-day ȘI data-hour
+        // Aceasta garantează că găsim celula exactă, nu o celulă random cu aceeași oră
+        // Format: [data-day="VALUE"][data-hour="VALUE"]
+        const cellSelector = `[data-day="${activity.day}"][data-hour="${activity.hour}"]`;
+        const cell = document.querySelector(cellSelector);
         
         if (cell) {
             updateCellVisual(cell, activity);
+            console.log(`Activitate randată: id=${activity.id}, selector=${cellSelector}`);
         } else {
-            console.error(`Celula nu găsită pentru activitate: day=${activity.day}, hour=${activity.hour}`);
+            console.error(`Celula nu găsită pentru activitate: selector=${cellSelector}, day=${activity.day}, hour=${activity.hour}`);
         }
     });
 }
@@ -277,6 +284,8 @@ function getActivityColor(activity) {
 
 /**
  * Actualizează aspectul vizual al celulei cu date de activitate
+ * CRITICAL: Această funcție NUMAI adaugă conținut în celula selectată
+ * Celula trebuie deja să fie găsită cu AMBELE day și hour
  */
 function updateCellVisual(cell, activity) {
     cell.classList.add('scheduled');
@@ -332,9 +341,16 @@ function handleCellClick(event) {
     if (!cell) return;
 
     // Citește day și hour DIRECT din atributele celulei (source of truth)
-    const hour = parseInt(cell.getAttribute('data-hour'));
+    // CRITICAL: Ambele valori trebuie să fie prezente și valide
     const dayIndex = parseInt(cell.getAttribute('data-day'));
+    const hour = parseInt(cell.getAttribute('data-hour'));
     const activityId = cell.getAttribute('data-activity-id');
+
+    // Validare: ambele coordinate trebuie să fie valide
+    if (isNaN(dayIndex) || isNaN(hour)) {
+        console.error('Eroare: Celula nu are atributele data-day sau data-hour valide');
+        return;
+    }
 
     // Salvează informații explicite despre celula selectată
     STATE.currentCell = {
@@ -474,6 +490,7 @@ function handleSave() {
  * 
  * REGULA CRUCIALĂ: Doar activitatea cu ID-ul corespunzător se șterge
  * Toate celelalte activități rămân în poziția lor originală
+ * CRITICAL: Nicio activitate NU va fi mutată vreodată din cauza unei ștergeri
  */
 function handleDelete() {
     if (!STATE.currentActivity) return;
