@@ -4,6 +4,36 @@
  */
 
 // ============================================
+// CENTRALIZED COLOR CONFIGURATION
+// ============================================
+
+const ACTIVITY_COLORS = {
+    // Main Categories
+    'Job': '#6B7280',              // Modern Gray
+    'Free Time': '#3B82F6',         // Blue
+    
+    // OVB Subtypes
+    'OVB Analysis': '#F97316',      // Orange
+    'OVB Consultation 1': '#38BDF8', // Light Blue
+    'OVB Consultation 2': '#8B5CF6', // Purple
+    'OVB Signing': '#22C55E',        // Green
+};
+
+// ============================================
+// DESIGN SYSTEM CONSTANTS
+// ============================================
+
+const DESIGN = {
+    BORDER_RADIUS: '12px',
+    SOFT_SHADOW: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    FONT_WEIGHT: '600',
+    PADDING: '12px',
+    TRANSITION_DURATION: '0.2s',
+    HOVER_SCALE: '1.02',
+    HOVER_BRIGHTNESS: '0.95',
+};
+
+// ============================================
 // CONFIGURATION
 // ============================================
 
@@ -12,14 +42,6 @@ const CONFIG = {
     END_TIME: 22,
     DAYS: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     STORAGE_KEY: 'timepilot_activities',
-    CATEGORY_COLORS: {
-        'Job': '#2563eb',                    // Blue
-        'Free Time': '#a855f7',              // Purple
-        'OVB Analysis': '#10b981',           // Green
-        'OVB Consultation 1': '#f97316',     // Orange
-        'OVB Consultation 2': '#eab308',     // Yellow
-        'OVB Signing': '#ef4444',            // Red
-    },
 };
 
 // ============================================
@@ -70,6 +92,7 @@ function initializeApplication() {
     generatePlanner();
     renderActivitiesOnPlanner();
     attachEventListeners();
+    injectActivityCardStyles();
 }
 
 // ============================================
@@ -193,6 +216,17 @@ function renderActivitiesOnPlanner() {
 }
 
 /**
+ * Get the color for an activity based on category and subtype
+ */
+function getActivityColor(activity) {
+    if (activity.category === 'OVB' && activity.subtype) {
+        const colorKey = `OVB ${activity.subtype}`;
+        return ACTIVITY_COLORS[colorKey] || ACTIVITY_COLORS['Job'];
+    }
+    return ACTIVITY_COLORS[activity.category] || ACTIVITY_COLORS['Job'];
+}
+
+/**
  * Update cell visual with activity data
  */
 function updateCellVisual(cell, activity) {
@@ -208,20 +242,9 @@ function updateCellVisual(cell, activity) {
     cell.textContent = displayText;
     cell.title = generateCellTooltip(activity);
     
-    // Apply color based on full type
-    const colorKey = getColorKeyForActivity(activity);
-    const color = CONFIG.CATEGORY_COLORS[colorKey] || CONFIG.CATEGORY_COLORS['Job'];
+    // Apply color from centralized configuration
+    const color = getActivityColor(activity);
     cell.style.backgroundColor = color;
-}
-
-/**
- * Get the color key for an activity
- */
-function getColorKeyForActivity(activity) {
-    if (activity.category === 'OVB') {
-        return `OVB ${activity.subtype}`;
-    }
-    return activity.category;
 }
 
 /**
@@ -559,6 +582,48 @@ function getActivitiesForHour(hour) {
 }
 
 // ============================================
+// ACTIVITY CARD STYLING
+// ============================================
+
+/**
+ * Inject activity card styles with design system rules
+ */
+function injectActivityCardStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .weekly-planner td.scheduled {
+            border-radius: ${DESIGN.BORDER_RADIUS} !important;
+            box-shadow: ${DESIGN.SOFT_SHADOW} !important;
+            font-weight: ${DESIGN.FONT_WEIGHT} !important;
+            padding: ${DESIGN.PADDING} !important;
+            transition: all ${DESIGN.TRANSITION_DURATION} ease !important;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: white;
+            cursor: pointer;
+        }
+
+        .weekly-planner td.scheduled:hover {
+            transform: scale(${DESIGN.HOVER_SCALE});
+            filter: brightness(${DESIGN.HOVER_BRIGHTNESS});
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+            order: -1;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background-color: #dc2626;
+            box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// ============================================
 // KEYBOARD SHORTCUTS
 // ============================================
 
@@ -570,7 +635,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 // ============================================
-// ANIMATIONS & STYLES
+// ANIMATIONS
 // ============================================
 
 const style = document.createElement('style');
@@ -595,17 +660,6 @@ style.textContent = `
             transform: translateX(400px);
             opacity: 0;
         }
-    }
-
-    .btn-danger {
-        background-color: #ef4444;
-        color: white;
-        order: -1;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-        background-color: #dc2626;
-        box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3);
     }
 `;
 document.head.appendChild(style);
