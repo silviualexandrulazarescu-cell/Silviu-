@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ro">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimePilot OVB - Weekly Planner</title>
+    <title>TimePilot OVB - Planificator Săptămânal</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1>TimePilot OVB</h1>
-            <p class="subtitle">Weekly Schedule Manager</p>
+            <p class="subtitle">Manager de Planificare Săptămânală</p>
         </header>
 
         <main class="main-content">
@@ -18,14 +18,14 @@
                 <table class="weekly-planner" id="weeklyPlanner">
                     <thead>
                         <tr>
-                            <th class="time-header">Time</th>
-                            <th>Monday</th>
-                            <th>Tuesday</th>
-                            <th>Wednesday</th>
-                            <th>Thursday</th>
-                            <th>Friday</th>
-                            <th>Saturday</th>
-                            <th>Sunday</th>
+                            <th class="time-header">Ora</th>
+                            <th>Luni</th>
+                            <th>Marți</th>
+                            <th>Miercuri</th>
+                            <th>Joi</th>
+                            <th>Vineri</th>
+                            <th>Sâmbătă</th>
+                            <th>Duminică</th>
                         </tr>
                     </thead>
                     <tbody id="plannerBody">
@@ -40,45 +40,45 @@
     <div class="modal" id="scheduleModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Schedule Activity</h2>
+                <h2>Activitate</h2>
                 <button class="modal-close" id="modalClose">&times;</button>
             </div>
 
             <div class="modal-body">
                 <div class="form-group">
-                    <label for="categorySelect">Category *</label>
+                    <label for="categorySelect">Categorie *</label>
                     <select id="categorySelect" required>
-                        <option value="">Select a category</option>
+                        <option value="">Selectează o categorie</option>
                         <option value="OVB">OVB</option>
                         <option value="Job">Job</option>
-                        <option value="Free Time">Free Time</option>
+                        <option value="Timp liber">Timp liber</option>
                     </select>
                 </div>
 
                 <div class="form-group" id="subcategoryGroup" style="display: none;">
-                    <label for="subcategorySelect">OVB Type *</label>
+                    <label for="subcategorySelect">Tip activitate *</label>
                     <select id="subcategorySelect">
-                        <option value="">Select OVB type</option>
-                        <option value="Analysis">Analysis</option>
-                        <option value="Consultation 1">Consultation 1</option>
-                        <option value="Consultation 2">Consultation 2</option>
-                        <option value="Signing">Signing</option>
+                        <option value="">Selectează tip activitate</option>
+                        <option value="Analiză">Analiză</option>
+                        <option value="Consultanță 1">Consultanță 1</option>
+                        <option value="Consultanță 2">Consultanță 2</option>
+                        <option value="Semnare">Semnare</option>
                     </select>
                 </div>
 
                 <div class="form-group">
-                    <label for="clientName">Client Name</label>
-                    <input type="text" id="clientName" placeholder="Enter client name">
+                    <label for="clientName">Nume client</label>
+                    <input type="text" id="clientName" placeholder="Introdu numele clientului">
                 </div>
 
                 <div class="form-group">
-                    <label for="phone">Phone</label>
-                    <input type="tel" id="phone" placeholder="Enter phone number">
+                    <label for="phone">Telefon</label>
+                    <input type="tel" id="phone" placeholder="Introdu numărul de telefon">
                 </div>
 
                 <div class="form-group">
-                    <label for="notes">Notes</label>
-                    <textarea id="notes" placeholder="Enter additional notes" rows="4"></textarea>
+                    <label for="notes">Observații</label>
+                    <textarea id="notes" placeholder="Introdu observații suplimentare" rows="4"></textarea>
                 </div>
 
                 <div class="time-info" id="timeInfo">
@@ -87,8 +87,8 @@
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                <button class="btn btn-primary" id="saveBtn">Save</button>
+                <button class="btn btn-secondary" id="cancelBtn">Anulează</button>
+                <button class="btn btn-primary" id="saveBtn">Salvează</button>
             </div>
         </div>
     </div>
