@@ -1,6 +1,6 @@
 /**
  * TimePilot OVB - Weekly Planner Application
- * Modern vanilla JavaScript weekly schedule manager
+ * Modern vanilla JavaScript weekly schedule manager with LocalStorage persistence
  */
 
 // ============================================
@@ -11,6 +11,15 @@ const CONFIG = {
     START_TIME: 8,
     END_TIME: 22,
     DAYS: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    STORAGE_KEY: 'timepilot_activities',
+    CATEGORY_COLORS: {
+        'Job': '#2563eb',                    // Blue
+        'Free Time': '#a855f7',              // Purple
+        'OVB Analysis': '#10b981',           // Green
+        'OVB Consultation 1': '#f97316',     // Orange
+        'OVB Consultation 2': '#eab308',     // Yellow
+        'OVB Signing': '#ef4444',            // Red
+    },
 };
 
 // ============================================
@@ -18,8 +27,10 @@ const CONFIG = {
 // ============================================
 
 const STATE = {
-    schedules: new Map(), // Store scheduled activities
-    currentCell: null, // Track currently selected cell
+    activities: [],           // Store all activities with full data
+    currentActivity: null,    // Track currently edited activity
+    currentCell: null,        // Track currently selected cell
+    activityIdCounter: 0,    // Counter for unique IDs
 };
 
 // ============================================
@@ -40,6 +51,7 @@ const DOM = {
     saveBtn: document.getElementById('saveBtn'),
     cancelBtn: document.getElementById('cancelBtn'),
     modalClose: document.getElementById('modalClose'),
+    modalHeader: document.querySelector('.modal-header h2'),
 };
 
 // ============================================
@@ -47,9 +59,58 @@ const DOM = {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    generatePlanner();
-    attachEventListeners();
+    initializeApplication();
 });
+
+/**
+ * Initialize the application
+ */
+function initializeApplication() {
+    loadActivitiesFromStorage();
+    generatePlanner();
+    renderActivitiesOnPlanner();
+    attachEventListeners();
+}
+
+// ============================================
+// LOCAL STORAGE MANAGEMENT
+// ============================================
+
+/**
+ * Save activities to LocalStorage
+ */
+function saveActivitiesToStorage() {
+    const data = STATE.activities.map(activity => ({
+        ...activity,
+    }));
+    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(data));
+}
+
+/**
+ * Load activities from LocalStorage
+ */
+function loadActivitiesFromStorage() {
+    const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
+    if (stored) {
+        try {
+            STATE.activities = JSON.parse(stored);
+            // Update counter to ensure new IDs are unique
+            if (STATE.activities.length > 0) {
+                STATE.activityIdCounter = Math.max(...STATE.activities.map(a => a.id)) + 1;
+            }
+        } catch (error) {
+            console.error('Error loading activities from storage:', error);
+            STATE.activities = [];
+        }
+    }
+}
+
+/**
+ * Generate unique activity ID
+ */
+function generateActivityId() {
+    return STATE.activityIdCounter++;
+}
 
 // ============================================
 // PLANNER GENERATION
@@ -90,10 +151,97 @@ function generatePlanner() {
 }
 
 /**
- * Generate a unique cell ID
+ * Generate a unique cell ID based on time and day
  */
 function generateCellId(hour, dayIndex) {
     return `${String(hour).padStart(2, '0')}-${dayIndex}`;
+}
+
+/**
+ * Find cell element by cell ID
+ */
+function findCellElement(cellId) {
+    return document.querySelector(`[data-cell-id="${cellId}"]`);
+}
+
+// ============================================
+// ACTIVITY RENDERING
+// ============================================
+
+/**
+ * Render all activities on the planner
+ */
+function renderActivitiesOnPlanner() {
+    // Clear all cells first
+    document.querySelectorAll('.weekly-planner td.scheduled').forEach(cell => {
+        cell.classList.remove('scheduled');
+        cell.textContent = '';
+        cell.title = '';
+        cell.removeAttribute('data-activity-id');
+        cell.style.backgroundColor = '';
+    });
+
+    // Render each activity
+    STATE.activities.forEach(activity => {
+        const cellId = generateCellId(activity.hour, activity.day);
+        const cell = findCellElement(cellId);
+        
+        if (cell) {
+            updateCellVisual(cell, activity);
+        }
+    });
+}
+
+/**
+ * Update cell visual with activity data
+ */
+function updateCellVisual(cell, activity) {
+    cell.classList.add('scheduled');
+    cell.setAttribute('data-activity-id', activity.id);
+    
+    // Determine display text based on category
+    let displayText = activity.category;
+    if (activity.category === 'OVB' && activity.subtype) {
+        displayText = `OVB\n${activity.subtype}`;
+    }
+    
+    cell.textContent = displayText;
+    cell.title = generateCellTooltip(activity);
+    
+    // Apply color based on full type
+    const colorKey = getColorKeyForActivity(activity);
+    const color = CONFIG.CATEGORY_COLORS[colorKey] || CONFIG.CATEGORY_COLORS['Job'];
+    cell.style.backgroundColor = color;
+}
+
+/**
+ * Get the color key for an activity
+ */
+function getColorKeyForActivity(activity) {
+    if (activity.category === 'OVB') {
+        return `OVB ${activity.subtype}`;
+    }
+    return activity.category;
+}
+
+/**
+ * Generate tooltip text for a cell
+ */
+function generateCellTooltip(activity) {
+    let tooltip = activity.category;
+    if (activity.subtype) {
+        tooltip += ` - ${activity.subtype}`;
+    }
+    if (activity.clientName) {
+        tooltip += `\nClient: ${activity.clientName}`;
+    }
+    if (activity.phone) {
+        tooltip += `\nPhone: ${activity.phone}`;
+    }
+    if (activity.notes) {
+        tooltip += `\nNotes: ${activity.notes}`;
+    }
+    return tooltip;
 }
 
 // ============================================
@@ -108,10 +256,13 @@ function handleCellClick(event) {
         return;
     }
 
-    const cell = event.target;
+    const cell = event.target.closest('td');
+    if (!cell) return;
+
     const hour = parseInt(cell.getAttribute('data-time'));
     const dayIndex = parseInt(cell.getAttribute('data-day'));
     const cellId = cell.getAttribute('data-cell-id');
+    const activityId = cell.getAttribute('data-activity-id');
 
     STATE.currentCell = {
         element: cell,
@@ -121,12 +272,20 @@ function handleCellClick(event) {
         day: CONFIG.DAYS[dayIndex],
     };
 
-    // Load existing data if available
-    const existingData = STATE.schedules.get(cellId);
-    if (existingData) {
-        populateFormWithData(existingData);
+    // Check if there's an existing activity in this cell
+    if (activityId) {
+        const existingActivity = STATE.activities.find(a => a.id == activityId);
+        if (existingActivity) {
+            STATE.currentActivity = { ...existingActivity };
+            populateFormWithData(STATE.currentActivity);
+            DOM.modalHeader.textContent = 'Edit Activity';
+            showDeleteButton();
+        }
     } else {
+        STATE.currentActivity = null;
         clearForm();
+        DOM.modalHeader.textContent = 'Schedule Activity';
+        hideDeleteButton();
     }
 
     // Update time info
@@ -176,25 +335,63 @@ function handleSave() {
         return;
     }
 
-    const data = {
+    const activityData = {
+        id: STATE.currentActivity ? STATE.currentActivity.id : generateActivityId(),
         category: category,
-        subcategory: category === 'OVB' ? DOM.subcategorySelect.value : null,
+        subtype: category === 'OVB' ? DOM.subcategorySelect.value : null,
         clientName: DOM.clientName.value.trim(),
         phone: DOM.phone.value.trim(),
         notes: DOM.notes.value.trim(),
+        day: STATE.currentCell.dayIndex,
+        hour: STATE.currentCell.hour,
     };
 
-    // Save to state
-    STATE.schedules.set(STATE.currentCell.cellId, data);
+    if (STATE.currentActivity) {
+        // Update existing activity
+        const index = STATE.activities.findIndex(a => a.id === STATE.currentActivity.id);
+        if (index !== -1) {
+            STATE.activities[index] = activityData;
+        }
+    } else {
+        // Add new activity
+        STATE.activities.push(activityData);
+    }
 
-    // Update cell visual
-    updateCellVisual(STATE.currentCell.element, data);
+    // Save to localStorage
+    saveActivitiesToStorage();
+
+    // Re-render planner
+    renderActivitiesOnPlanner();
 
     // Close modal
     closeModal();
 
-    // Optional: Show confirmation message
-    console.log('Schedule saved:', data);
+    // Show confirmation message
+    showAlert('Activity saved successfully!');
+}
+
+/**
+ * Handle delete button click
+ */
+function handleDelete() {
+    if (!STATE.currentActivity) return;
+
+    if (confirm('Are you sure you want to delete this activity?')) {
+        // Remove activity from state
+        STATE.activities = STATE.activities.filter(a => a.id !== STATE.currentActivity.id);
+
+        // Save to localStorage
+        saveActivitiesToStorage();
+
+        // Re-render planner
+        renderActivitiesOnPlanner();
+
+        // Close modal
+        closeModal();
+
+        // Show confirmation message
+        showAlert('Activity deleted successfully!');
+    }
 }
 
 // ============================================
@@ -218,6 +415,7 @@ function closeModal() {
     DOM.modalOverlay.classList.remove('active');
     document.body.style.overflow = 'auto';
     STATE.currentCell = null;
+    STATE.currentActivity = null;
 }
 
 /**
@@ -237,10 +435,10 @@ function clearForm() {
  */
 function populateFormWithData(data) {
     DOM.categorySelect.value = data.category;
-    
+
     if (data.category === 'OVB') {
         DOM.subcategoryGroup.style.display = 'block';
-        DOM.subcategorySelect.value = data.subcategory;
+        DOM.subcategorySelect.value = data.subtype || '';
     } else {
         DOM.subcategoryGroup.style.display = 'none';
     }
@@ -259,53 +457,52 @@ function updateTimeInfo(hour, day) {
 }
 
 /**
- * Update cell visual after saving
+ * Show delete button
  */
-function updateCellVisual(cell, data) {
-    cell.classList.add('scheduled');
-    cell.textContent = data.category === 'OVB' 
-        ? data.subcategory 
-        : data.category;
-    cell.title = generateCellTooltip(data);
+function showDeleteButton() {
+    let deleteBtn = document.getElementById('deleteBtn');
+    if (!deleteBtn) {
+        deleteBtn = document.createElement('button');
+        deleteBtn.id = 'deleteBtn';
+        deleteBtn.className = 'btn btn-danger';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', handleDelete);
+        document.querySelector('.modal-footer').insertBefore(deleteBtn, DOM.saveBtn);
+    }
+    deleteBtn.style.display = 'block';
 }
 
 /**
- * Generate tooltip text for a cell
+ * Hide delete button
  */
-function generateCellTooltip(data) {
-    let tooltip = `${data.category}`;
-    if (data.subcategory) {
-        tooltip += ` - ${data.subcategory}`;
+function hideDeleteButton() {
+    const deleteBtn = document.getElementById('deleteBtn');
+    if (deleteBtn) {
+        deleteBtn.style.display = 'none';
     }
-    if (data.clientName) {
-        tooltip += `\nClient: ${data.clientName}`;
-    }
-    if (data.phone) {
-        tooltip += `\nPhone: ${data.phone}`;
-    }
-    if (data.notes) {
-        tooltip += `\nNotes: ${data.notes}`;
-    }
-    return tooltip;
 }
 
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
 /**
- * Show alert message (simple implementation)
+ * Show alert message
  */
 function showAlert(message) {
-    // Create a simple toast-like notification
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background-color: #dc3545;
+        background-color: #10b981;
         color: white;
         padding: 15px 20px;
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         z-index: 2000;
         animation: slideIn 0.3s ease;
+        font-weight: 500;
     `;
     notification.textContent = message;
     document.body.appendChild(notification);
@@ -321,46 +518,44 @@ function showAlert(message) {
 // ============================================
 
 /**
- * Export schedule data (for future API integration)
+ * Export schedule data
  */
 function exportSchedules() {
-    const data = {};
-    STATE.schedules.forEach((value, key) => {
-        data[key] = value;
-    });
-    return data;
+    return JSON.parse(JSON.stringify(STATE.activities));
 }
 
 /**
  * Clear all schedules
  */
 function clearAllSchedules() {
-    if (confirm('Are you sure you want to clear all schedules?')) {
-        STATE.schedules.clear();
-        document.querySelectorAll('.weekly-planner td.scheduled').forEach(cell => {
-            cell.classList.remove('scheduled');
-            cell.textContent = '';
-            cell.title = '';
-        });
+    if (confirm('Are you sure you want to clear all schedules? This cannot be undone.')) {
+        STATE.activities = [];
+        STATE.activityIdCounter = 0;
+        saveActivitiesToStorage();
+        renderActivitiesOnPlanner();
+        showAlert('All activities cleared!');
     }
 }
 
 /**
- * Get schedule for a specific cell
+ * Get activity by ID
  */
-function getSchedule(cellId) {
-    return STATE.schedules.get(cellId);
+function getActivity(activityId) {
+    return STATE.activities.find(a => a.id === activityId);
 }
 
 /**
- * Update schedule for a specific cell
+ * Get all activities for a specific day
  */
-function updateSchedule(cellId, data) {
-    if (data) {
-        STATE.schedules.set(cellId, data);
-    } else {
-        STATE.schedules.delete(cellId);
-    }
+function getActivitiesForDay(dayIndex) {
+    return STATE.activities.filter(a => a.day === dayIndex);
+}
+
+/**
+ * Get all activities for a specific hour
+ */
+function getActivitiesForHour(hour) {
+    return STATE.activities.filter(a => a.hour === hour);
 }
 
 // ============================================
@@ -375,7 +570,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 // ============================================
-// OPTIONAL: Add animation styles to document
+// ANIMATIONS & STYLES
 // ============================================
 
 const style = document.createElement('style');
@@ -400,6 +595,17 @@ style.textContent = `
             transform: translateX(400px);
             opacity: 0;
         }
+    }
+
+    .btn-danger {
+        background-color: #ef4444;
+        color: white;
+        order: -1;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+        background-color: #dc2626;
+        box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3);
     }
 `;
 document.head.appendChild(style);
