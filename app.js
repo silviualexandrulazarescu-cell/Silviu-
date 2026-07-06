@@ -1,26 +1,26 @@
 /**
- * TimePilot OVB - Weekly Planner Application
- * Modern vanilla JavaScript weekly schedule manager with LocalStorage persistence
+ * TimePilot OVB - Aplicație Planificator Săptămânal
+ * Manager modern cu sincronizare LocalStorage
  */
 
 // ============================================
-// CENTRALIZED COLOR CONFIGURATION
+// CONFIGURAȚIE CULORI CENTRALIZATĂ
 // ============================================
 
 const ACTIVITY_COLORS = {
-    // Main Categories
-    'Job': '#6B7280',              // Modern Gray
-    'Free Time': '#3B82F6',         // Blue
+    // Categorii principale
+    'Job': '#6B7280',              // Gri Modern
+    'Timp liber': '#3B82F6',       // Albastru
     
-    // OVB Subtypes
-    'OVB Analysis': '#F97316',      // Orange
-    'OVB Consultation 1': '#38BDF8', // Light Blue
-    'OVB Consultation 2': '#8B5CF6', // Purple
-    'OVB Signing': '#22C55E',        // Green
+    // Subtipuri OVB
+    'OVB Analiză': '#F97316',      // Portocaliu
+    'OVB Consultanță 1': '#38BDF8', // Albastru Deschis
+    'OVB Consultanță 2': '#8B5CF6', // Violet
+    'OVB Semnare': '#22C55E',       // Verde
 };
 
 // ============================================
-// DESIGN SYSTEM CONSTANTS
+// CONSTANTE SISTEM DESIGN
 // ============================================
 
 const DESIGN = {
@@ -34,29 +34,29 @@ const DESIGN = {
 };
 
 // ============================================
-// CONFIGURATION
+// CONFIGURAȚIE
 // ============================================
 
 const CONFIG = {
     START_TIME: 8,
     END_TIME: 22,
-    DAYS: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    DAYS: ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică'],
     STORAGE_KEY: 'timepilot_activities',
 };
 
 // ============================================
-// STATE MANAGEMENT
+// GESTIONARE STARE
 // ============================================
 
 const STATE = {
-    activities: [],           // Store all activities with full data
-    currentActivity: null,    // Track currently edited activity
-    currentCell: null,        // Track currently selected cell
-    activityIdCounter: 0,    // Counter for unique IDs
+    activities: [],           // Stochează toate activitățile cu date complete
+    currentActivity: null,    // Urmărește activitatea editată curent
+    currentCell: null,        // Urmărește celula selectată curent
+    activityIdCounter: 0,     // Contor pentru ID-uri unice
 };
 
 // ============================================
-// DOM ELEMENTS CACHE
+// CACHE ELEMENTE DOM
 // ============================================
 
 const DOM = {
@@ -77,7 +77,7 @@ const DOM = {
 };
 
 // ============================================
-// INITIALIZATION
+// INIȚIALIZARE
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Initialize the application
+ * Inițializează aplicația
  */
 function initializeApplication() {
     loadActivitiesFromStorage();
@@ -96,11 +96,11 @@ function initializeApplication() {
 }
 
 // ============================================
-// LOCAL STORAGE MANAGEMENT
+// GESTIONARE STOCARE LOCALĂ
 // ============================================
 
 /**
- * Save activities to LocalStorage
+ * Salvează activitățile în LocalStorage
  */
 function saveActivitiesToStorage() {
     const data = STATE.activities.map(activity => ({
@@ -110,37 +110,37 @@ function saveActivitiesToStorage() {
 }
 
 /**
- * Load activities from LocalStorage
+ * Încarcă activitățile din LocalStorage
  */
 function loadActivitiesFromStorage() {
     const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
     if (stored) {
         try {
             STATE.activities = JSON.parse(stored);
-            // Update counter to ensure new IDs are unique
+            // Actualizează contorul pentru a asigura ID-uri unice
             if (STATE.activities.length > 0) {
                 STATE.activityIdCounter = Math.max(...STATE.activities.map(a => a.id)) + 1;
             }
         } catch (error) {
-            console.error('Error loading activities from storage:', error);
+            console.error('Eroare la încărcarea activităților:', error);
             STATE.activities = [];
         }
     }
 }
 
 /**
- * Generate unique activity ID
+ * Generează ID unic pentru activitate
  */
 function generateActivityId() {
     return STATE.activityIdCounter++;
 }
 
 // ============================================
-// PLANNER GENERATION
+// GENERARE PLANIFICATOR
 // ============================================
 
 /**
- * Generate the weekly planner table dynamically
+ * Generează tabelul planificatorului săptămânal dinamic
  */
 function generatePlanner() {
     const fragment = document.createDocumentFragment();
@@ -149,13 +149,13 @@ function generatePlanner() {
         const row = document.createElement('tr');
         const timeCell = document.createElement('td');
 
-        // Format time as HH:00
+        // Formatează ora ca HH:00
         const timeString = `${String(hour).padStart(2, '0')}:00`;
         timeCell.className = 'time-cell';
         timeCell.textContent = timeString;
         row.appendChild(timeCell);
 
-        // Create cells for each day
+        // Creează celule pentru fiecare zi
         for (let dayIndex = 0; dayIndex < CONFIG.DAYS.length; dayIndex++) {
             const cell = document.createElement('td');
             const cellId = generateCellId(hour, dayIndex);
@@ -174,28 +174,28 @@ function generatePlanner() {
 }
 
 /**
- * Generate a unique cell ID based on time and day
+ * Generează ID unic pentru celulă pe baza orei și zilei
  */
 function generateCellId(hour, dayIndex) {
     return `${String(hour).padStart(2, '0')}-${dayIndex}`;
 }
 
 /**
- * Find cell element by cell ID
+ * Găsește element de celulă după ID
  */
 function findCellElement(cellId) {
     return document.querySelector(`[data-cell-id="${cellId}"]`);
 }
 
 // ============================================
-// ACTIVITY RENDERING
+// RANDARE ACTIVITĂȚI
 // ============================================
 
 /**
- * Render all activities on the planner
+ * Randează toate activitățile pe planificator
  */
 function renderActivitiesOnPlanner() {
-    // Clear all cells first
+    // Șterge mai întâi toate celulele
     document.querySelectorAll('.weekly-planner td.scheduled').forEach(cell => {
         cell.classList.remove('scheduled');
         cell.textContent = '';
@@ -204,7 +204,7 @@ function renderActivitiesOnPlanner() {
         cell.style.backgroundColor = '';
     });
 
-    // Render each activity
+    // Randează fiecare activitate
     STATE.activities.forEach(activity => {
         const cellId = generateCellId(activity.hour, activity.day);
         const cell = findCellElement(cellId);
@@ -216,7 +216,7 @@ function renderActivitiesOnPlanner() {
 }
 
 /**
- * Get the color for an activity based on category and subtype
+ * Obține culoarea pentru o activitate pe baza categoriei și subtipului
  */
 function getActivityColor(activity) {
     if (activity.category === 'OVB' && activity.subtype) {
@@ -227,13 +227,13 @@ function getActivityColor(activity) {
 }
 
 /**
- * Update cell visual with activity data
+ * Actualizează aspectul vizual al celulei cu date de activitate
  */
 function updateCellVisual(cell, activity) {
     cell.classList.add('scheduled');
     cell.setAttribute('data-activity-id', activity.id);
     
-    // Determine display text based on category
+    // Determină textul afișat pe baza categoriei
     let displayText = activity.category;
     if (activity.category === 'OVB' && activity.subtype) {
         displayText = `OVB\n${activity.subtype}`;
@@ -242,13 +242,13 @@ function updateCellVisual(cell, activity) {
     cell.textContent = displayText;
     cell.title = generateCellTooltip(activity);
     
-    // Apply color from centralized configuration
+    // Aplică culoarea din configurația centralizată
     const color = getActivityColor(activity);
     cell.style.backgroundColor = color;
 }
 
 /**
- * Generate tooltip text for a cell
+ * Generează textul sfatului pentru o celulă
  */
 function generateCellTooltip(activity) {
     let tooltip = activity.category;
@@ -259,20 +259,20 @@ function generateCellTooltip(activity) {
         tooltip += `\nClient: ${activity.clientName}`;
     }
     if (activity.phone) {
-        tooltip += `\nPhone: ${activity.phone}`;
+        tooltip += `\nTelefon: ${activity.phone}`;
     }
     if (activity.notes) {
-        tooltip += `\nNotes: ${activity.notes}`;
+        tooltip += `\nObservații: ${activity.notes}`;
     }
     return tooltip;
 }
 
 // ============================================
-// EVENT HANDLERS
+// MANIPULATORI Evenimente
 // ============================================
 
 /**
- * Handle cell click to open modal
+ * Gestionează clic pe celulă pentru a deschide modalul
  */
 function handleCellClick(event) {
     if (event.target.classList.contains('time-cell')) {
@@ -295,31 +295,31 @@ function handleCellClick(event) {
         day: CONFIG.DAYS[dayIndex],
     };
 
-    // Check if there's an existing activity in this cell
+    // Verifică dacă există o activitate existentă în această celulă
     if (activityId) {
         const existingActivity = STATE.activities.find(a => a.id == activityId);
         if (existingActivity) {
             STATE.currentActivity = { ...existingActivity };
             populateFormWithData(STATE.currentActivity);
-            DOM.modalHeader.textContent = 'Edit Activity';
+            DOM.modalHeader.textContent = 'Editare Activitate';
             showDeleteButton();
         }
     } else {
         STATE.currentActivity = null;
         clearForm();
-        DOM.modalHeader.textContent = 'Schedule Activity';
+        DOM.modalHeader.textContent = 'Activitate';
         hideDeleteButton();
     }
 
-    // Update time info
+    // Actualizează informații despre oră
     updateTimeInfo(hour, CONFIG.DAYS[dayIndex]);
 
-    // Open modal
+    // Deschide modalul
     openModal();
 }
 
 /**
- * Attach event listeners to modal controls
+ * Atașează ascultători de evenimente la controalele modale
  */
 function attachEventListeners() {
     DOM.categorySelect.addEventListener('change', handleCategoryChange);
@@ -330,7 +330,7 @@ function attachEventListeners() {
 }
 
 /**
- * Handle category selection change
+ * Gestionează schimbarea selecției de categorie
  */
 function handleCategoryChange(event) {
     const category = event.target.value;
@@ -343,18 +343,18 @@ function handleCategoryChange(event) {
 }
 
 /**
- * Handle save button click
+ * Gestionează clic pe butonul de salvare
  */
 function handleSave() {
     const category = DOM.categorySelect.value;
 
     if (!category) {
-        showAlert('Please select a category');
+        showAlert('Te rog să selectezi o categorie');
         return;
     }
 
     if (category === 'OVB' && !DOM.subcategorySelect.value) {
-        showAlert('Please select an OVB type');
+        showAlert('Te rog să selectezi un tip de activitate');
         return;
     }
 
@@ -370,59 +370,59 @@ function handleSave() {
     };
 
     if (STATE.currentActivity) {
-        // Update existing activity
+        // Actualizează activitate existentă
         const index = STATE.activities.findIndex(a => a.id === STATE.currentActivity.id);
         if (index !== -1) {
             STATE.activities[index] = activityData;
         }
     } else {
-        // Add new activity
+        // Adaugă activitate nouă
         STATE.activities.push(activityData);
     }
 
-    // Save to localStorage
+    // Salvează în localStorage
     saveActivitiesToStorage();
 
-    // Re-render planner
+    // Re-randează planificatorul
     renderActivitiesOnPlanner();
 
-    // Close modal
+    // Închide modalul
     closeModal();
 
-    // Show confirmation message
-    showAlert('Activity saved successfully!');
+    // Afișează mesajul de confirmare
+    showAlert('Activitate salvată cu succes!');
 }
 
 /**
- * Handle delete button click
+ * Gestionează clic pe butonul de ștergere
  */
 function handleDelete() {
     if (!STATE.currentActivity) return;
 
-    if (confirm('Are you sure you want to delete this activity?')) {
-        // Remove activity from state
+    if (confirm('Ești sigur că vrei să ștergi această activitate?')) {
+        // Elimină activitate din stare
         STATE.activities = STATE.activities.filter(a => a.id !== STATE.currentActivity.id);
 
-        // Save to localStorage
+        // Salvează în localStorage
         saveActivitiesToStorage();
 
-        // Re-render planner
+        // Re-randează planificatorul
         renderActivitiesOnPlanner();
 
-        // Close modal
+        // Închide modalul
         closeModal();
 
-        // Show confirmation message
-        showAlert('Activity deleted successfully!');
+        // Afișează mesajul de confirmare
+        showAlert('Activitate ștearsă cu succes!');
     }
 }
 
 // ============================================
-// MODAL MANAGEMENT
+// GESTIONARE MODAL
 // ============================================
 
 /**
- * Open the modal with animation
+ * Deschide modalul cu animație
  */
 function openModal() {
     DOM.modal.classList.add('active');
@@ -431,7 +431,7 @@ function openModal() {
 }
 
 /**
- * Close the modal with animation
+ * Închide modalul cu animație
  */
 function closeModal() {
     DOM.modal.classList.remove('active');
@@ -442,7 +442,7 @@ function closeModal() {
 }
 
 /**
- * Clear form fields
+ * Șterge câmpurile formularului
  */
 function clearForm() {
     DOM.categorySelect.value = '';
@@ -454,7 +454,7 @@ function clearForm() {
 }
 
 /**
- * Populate form with existing data
+ * Completează formularul cu date existente
  */
 function populateFormWithData(data) {
     DOM.categorySelect.value = data.category;
@@ -472,15 +472,15 @@ function populateFormWithData(data) {
 }
 
 /**
- * Update time information display
+ * Actualizează afișajul informațiilor despre oră
  */
 function updateTimeInfo(hour, day) {
     const timeString = `${String(hour).padStart(2, '0')}:00`;
-    DOM.timeInfo.innerHTML = `<strong>${day}</strong> at <strong>${timeString}</strong>`;
+    DOM.timeInfo.innerHTML = `<strong>${day}</strong> la <strong>${timeString}</strong>`;
 }
 
 /**
- * Show delete button
+ * Afișează butonul de ștergere
  */
 function showDeleteButton() {
     let deleteBtn = document.getElementById('deleteBtn');
@@ -488,7 +488,7 @@ function showDeleteButton() {
         deleteBtn = document.createElement('button');
         deleteBtn.id = 'deleteBtn';
         deleteBtn.className = 'btn btn-danger';
-        deleteBtn.textContent = 'Delete';
+        deleteBtn.textContent = 'Șterge';
         deleteBtn.addEventListener('click', handleDelete);
         document.querySelector('.modal-footer').insertBefore(deleteBtn, DOM.saveBtn);
     }
@@ -496,7 +496,7 @@ function showDeleteButton() {
 }
 
 /**
- * Hide delete button
+ * Ascunde butonul de ștergere
  */
 function hideDeleteButton() {
     const deleteBtn = document.getElementById('deleteBtn');
@@ -506,11 +506,11 @@ function hideDeleteButton() {
 }
 
 // ============================================
-// NOTIFICATIONS
+// NOTIFICĂRI
 // ============================================
 
 /**
- * Show alert message
+ * Afișează mesaj de alertă
  */
 function showAlert(message) {
     const notification = document.createElement('div');
@@ -537,56 +537,56 @@ function showAlert(message) {
 }
 
 // ============================================
-// UTILITIES
+// UTILITARE
 // ============================================
 
 /**
- * Export schedule data
+ * Exportă date de planificare
  */
 function exportSchedules() {
     return JSON.parse(JSON.stringify(STATE.activities));
 }
 
 /**
- * Clear all schedules
+ * Șterge toate planificările
  */
 function clearAllSchedules() {
-    if (confirm('Are you sure you want to clear all schedules? This cannot be undone.')) {
+    if (confirm('Ești sigur că vrei să ștergi toate activitățile? Aceasta nu poate fi anulată.')) {
         STATE.activities = [];
         STATE.activityIdCounter = 0;
         saveActivitiesToStorage();
         renderActivitiesOnPlanner();
-        showAlert('All activities cleared!');
+        showAlert('Toate activitățile au fost șterse!');
     }
 }
 
 /**
- * Get activity by ID
+ * Obține activitate după ID
  */
 function getActivity(activityId) {
     return STATE.activities.find(a => a.id === activityId);
 }
 
 /**
- * Get all activities for a specific day
+ * Obține toate activitățile pentru o zi specifică
  */
 function getActivitiesForDay(dayIndex) {
     return STATE.activities.filter(a => a.day === dayIndex);
 }
 
 /**
- * Get all activities for a specific hour
+ * Obține toate activitățile pentru o oră specifică
  */
 function getActivitiesForHour(hour) {
     return STATE.activities.filter(a => a.hour === hour);
 }
 
 // ============================================
-// ACTIVITY CARD STYLING
+// STILIZARE CARDURI ACTIVITATE
 // ============================================
 
 /**
- * Inject activity card styles with design system rules
+ * Injectează stiluri pentru cardurile de activitate cu reguli sistem design
  */
 function injectActivityCardStyles() {
     const style = document.createElement('style');
@@ -624,18 +624,18 @@ function injectActivityCardStyles() {
 }
 
 // ============================================
-// KEYBOARD SHORTCUTS
+// COMENZI TASTATURĂ
 // ============================================
 
 document.addEventListener('keydown', (event) => {
-    // Close modal on Escape
+    // Închide modalul pe Escape
     if (event.key === 'Escape' && DOM.modal.classList.contains('active')) {
         closeModal();
     }
 });
 
 // ============================================
-// ANIMATIONS
+// ANIMAȚII
 // ============================================
 
 const style = document.createElement('style');
